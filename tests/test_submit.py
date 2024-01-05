@@ -14,7 +14,7 @@ def test_submit_rating(mock_api: UserAPI):
 
     mock_session.request.assert_called_once_with(
         "POST",
-        f"{BASE_URL}{Endpoint.RATING}",
+        f"{BASE_URL}{Endpoint.RATING.value}",
         params={"client": mock_api._client_name},
         headers={"Content-Type": "application/xml; charset=UTF-8"},
         data="some xml",
