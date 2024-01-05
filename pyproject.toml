@@ -41,3 +41,7 @@ disable = """
     line-too-long
 """
 
+[tool.mypy]
+ignore_missing_imports = true
+
+

@@ -1,8 +1,8 @@
 """Exceptions for the API."""
 
-from typing import Iterable, List, Union
+from typing import Iterable, Union
 
-import requests  # type: ignore
+import requests
 
 from .enums import CoreEntities
 

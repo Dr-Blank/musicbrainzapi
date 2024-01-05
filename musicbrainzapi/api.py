@@ -6,10 +6,10 @@ from http import HTTPStatus
 from logging import getLogger
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
-import requests  # type: ignore
+import requests
 from bs4 import BeautifulSoup, Tag
-from musicbrainzngs import mbxml  # type: ignore
-from requests import Response  # type: ignore
+from musicbrainzngs import mbxml
+from requests import Response
 from requests_ratelimiter import LimiterSession
 
 from musicbrainzapi.models import MBEntity
@@ -181,7 +181,7 @@ class UserAPI:
                 raise ValueError("No link found in rating")
 
             _, entity, mbid = link.attrs["href"].split("/")
-            entity_name = link.findChild().text if link.findChild() else None  # type: ignore # noqa: E501
+            entity_name = link.findChild().text if link.findChild() else None  # type: ignore
             links.append(
                 MBEntity(
                     mbid=mbid,
@@ -207,7 +207,7 @@ class UserAPI:
         pagination_ul = soup.find("ul", class_="pagination")
         if pagination_ul is None or not isinstance(pagination_ul, Tag):
             return None
-        next_page = pagination_ul.find("li", text="Next").find("a")  # type: ignore # noqa: E501
+        next_page = pagination_ul.find("li", text="Next").find("a")  # type: ignore
         if next_page is None or not isinstance(next_page, Tag):
             return None
         next_page_link = next_page["href"]

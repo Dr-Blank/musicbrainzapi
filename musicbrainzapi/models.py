@@ -1,3 +1,5 @@
+""" Models for the MusicBrainz API """
+
 from dataclasses import dataclass
 from typing import Optional
 
