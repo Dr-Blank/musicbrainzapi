@@ -1,13 +1,19 @@
-from musicbrainzapi import UserAPI
 import re
 
-def test_header_auth():
-    api = UserAPI("token")
+import pytest
+
+from musicbrainzapi import UserAPI
+
+
+def test_header_authorization(api: UserAPI):
     header = api._session.headers.pop("Authorization")
-    assert header == "Bearer token"
+    assert header == f"Bearer {pytest.token_name}"
 
 
-def test_header_user_agent():
-    api = UserAPI("token")
-    header = api._session.headers.pop("User-Agent")
-    assert re.match(r"^musicbrainzapi/\d+\.\d+\.\d+ \(.*\)", header)
+def test_header_user_agent(api: UserAPI):
+    header = str(api._session.headers.pop("User-Agent"))
+    assert re.match(
+        rf"^{pytest.client_name}/{pytest.client_version} musicbrainzapi/\d+\.\d+\.\d+"
+        r" \(.*\)$",
+        header,
+    )
