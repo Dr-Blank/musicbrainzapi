@@ -34,3 +34,10 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 79
 preview = true
+
+[tool.pylint.messages_control]
+disable = """
+    too-many-arguments,
+    line-too-long
+"""
+
