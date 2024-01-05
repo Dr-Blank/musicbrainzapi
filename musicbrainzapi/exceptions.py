@@ -1,6 +1,30 @@
 """Exceptions for the API."""
 
+from typing import Iterable, List, Union
+
 import requests  # type: ignore
+
+from .enums import CoreEntities
+
+
+class UnsupportedEntityError(ValueError):
+    """Raised when an entity is not supported."""
+
+    def __init__(
+        self,
+        entity: Union[str, Iterable[str]],
+        supported_entities: Iterable[CoreEntities],
+    ) -> None:
+        self.supported_entities = supported_entities
+
+        if not isinstance(entity, str):
+            entity = set(entity) - set(supported_entities)
+
+        self.entity = entity
+        super().__init__(
+            "Only the following entities are supported:"
+            f" {supported_entities}\nReceived: {entity}"
+        )
 
 
 class APIError(requests.exceptions.RequestException):

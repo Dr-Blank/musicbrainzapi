@@ -4,22 +4,30 @@ import importlib.metadata
 from enum import Enum
 from http import HTTPStatus
 from logging import getLogger
-from typing import Any, Callable, Dict, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 import requests  # type: ignore
+from bs4 import BeautifulSoup, Tag
 from musicbrainzngs import mbxml  # type: ignore
+from requests import Response  # type: ignore
 from requests_ratelimiter import LimiterSession
 
-from musicbrainzapi.enums import RATING_SUPPORTED_ENTITIES  # type: ignore
-from musicbrainzapi.enums import CoreEntities
+from musicbrainzapi.models import MBEntity
 
-from .exceptions import APIError, NotFoundError, RateLimitError, ServerError
+from .enums import RATING_SUPPORTED_ENTITIES, CoreEntities
+from .exceptions import (
+    APIError,
+    NotFoundError,
+    RateLimitError,
+    ServerError,
+    UnsupportedEntityError,
+)
 
 __all__ = ["UserAPI"]
 
 logger = getLogger(__name__)
 
-BASE_URL = "https://musicbrainz.org/ws/2"
+BASE_URL = "https://musicbrainz.org"
 
 
 MBId = TypeVar("MBId", bound=str)
@@ -36,12 +44,18 @@ is an integer between 0 and 100
 """
 
 
-class Endpoint(str, Enum):
+class WebEndpoints(str, Enum):
+    """endpoints for the web, not from the API"""
+
+    RATING = "/user/{user_name}/ratings/{mb_type}"
+
+
+class WSEndpoint(str, Enum):
     """Endpoints for the API"""
 
-    RATING = "/rating"
-    TAG = "/tag"
-    COLLECTION = "/collection"
+    RATING = "/ws/2/rating"
+    TAG = "/ws/2/tag"
+    COLLECTION = "/ws/2/collection"
 
 
 class UserAPI:
@@ -102,8 +116,10 @@ class UserAPI:
         endpoint: str,
         tries_left: int = 1,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
-        url = self._base_url + endpoint
+    ) -> Response:
+        url = (
+            self._base_url + endpoint if endpoint.startswith("/") else endpoint
+        )
         logger.debug("%s request to %s with %s", method, url, kwargs)
 
         try:
@@ -134,7 +150,7 @@ class UserAPI:
             if 500 <= response.status_code < 600:
                 raise ServerError(response) from exc
             raise APIError(response) from exc
-        return response.json()
+        return response
 
     def _make_post_request(
         self,
@@ -151,21 +167,74 @@ class UserAPI:
         )
 
         logger.debug("special post request with %s", kwargs)
-        return self._make_request("POST", endpoint, **kwargs)
+        return self._make_request("POST", endpoint, **kwargs).json()
 
-    def get_rating(
+    def _get_ratings_entities(
+        self, ratings: List[BeautifulSoup]
+    ) -> List[MBEntity]:
+        """Get the entities for the ratings"""
+        links: List[MBEntity] = []
+        for rating in ratings:
+            int_rating = float(rating.text) * 20
+            link = rating.find_next("a")
+            if link is None or not isinstance(link, Tag):
+                raise ValueError("No link found in rating")
+
+            _, entity, mbid = link.attrs["href"].split("/")
+            entity_name = link.findChild().text if link.findChild() else None  # type: ignore # noqa: E501
+            links.append(
+                MBEntity(
+                    mbid=mbid,
+                    mb_type=CoreEntities(entity),
+                    name=entity_name,
+                    rating=int_rating,
+                )
+            )
+        return links
+
+    def _parse_ratings(self, ratings_soup: BeautifulSoup) -> List[MBEntity]:
+        """Parse a ratings from a BeautifulSoup object"""
+        ratings = ratings_soup.find_all("span", class_="current-rating")
+        return self._get_ratings_entities(ratings)
+
+    def _get_soup(self, endpoint: str) -> BeautifulSoup:
+        """Get the soup for an endpoint"""
+        response = self._make_request("GET", endpoint)
+        return BeautifulSoup(response.text, "html.parser")
+
+    def _soup_next_page_link(self, soup: BeautifulSoup) -> Optional[str]:
+        """Get the next page from a soup"""
+        pagination_ul = soup.find("ul", class_="pagination")
+        if pagination_ul is None or not isinstance(pagination_ul, Tag):
+            return None
+        next_page = pagination_ul.find("li", text="Next").find("a")  # type: ignore # noqa: E501
+        if next_page is None or not isinstance(next_page, Tag):
+            return None
+        next_page_link = next_page["href"]
+        return str(next_page_link)
+
+    def get_ratings(
         self,
-        mbid: str,
+        user_name: str,
         mb_type: str,
     ):
         """
-        Get rating for a given MBID
+        Get ratings of a user for a type of entity
         """
-        endpoint = Endpoint.RATING.value
-        response = self._make_request(
-            "GET", endpoint, params={"mbid": mbid, "type": mb_type}
+        if mb_type not in RATING_SUPPORTED_ENTITIES:
+            raise UnsupportedEntityError(mb_type, RATING_SUPPORTED_ENTITIES)
+
+        endpoint = WebEndpoints.RATING.value.format(
+            user_name=user_name, mb_type=mb_type.replace("-", "_")
         )
-        return response
+        soup = self._get_soup(endpoint)
+        next_link = self._soup_next_page_link(soup)
+        ratings = self._parse_ratings(soup)
+        while next_link is not None:
+            soup = self._get_soup(next_link)
+            next_link = self._soup_next_page_link(soup)
+            ratings.extend(self._parse_ratings(soup))
+        return ratings
 
     def get_collections(
         self,
@@ -173,9 +242,9 @@ class UserAPI:
         """
         Get collection for the user
         """
-        endpoint = Endpoint.COLLECTION.value
+        endpoint = WSEndpoint.COLLECTION.value
         response = self._make_request("GET", endpoint)
-        return response
+        return response.json()
 
     def _get_ratings_dict(
         self,
@@ -208,14 +277,13 @@ class UserAPI:
             entity not in RATING_SUPPORTED_ENTITIES
             for entity in entity_ratings
         ):
-            raise ValueError(
-                "Only the following entities support ratings: "
-                f"{RATING_SUPPORTED_ENTITIES}\n"
-                "Received:"
-                f" {[entity for entity in entity_ratings.keys() if entity not in RATING_SUPPORTED_ENTITIES]}"
+            raise UnsupportedEntityError(
+                entity_ratings.keys(),
+                RATING_SUPPORTED_ENTITIES,
             )
 
         response = self._make_post_request(
-            Endpoint.RATING.value, data=self._get_ratings_dict(entity_ratings)
+            WSEndpoint.RATING.value,
+            data=self._get_ratings_dict(entity_ratings),
         )
         return response
