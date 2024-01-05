@@ -1,0 +1,11 @@
+{
+  "workbench.colorCustomizations": {
+    "activityBar.background": "#0A2D5B",
+    "titleBar.activeBackground": "#0E3F7F",
+    "titleBar.activeForeground": "#F7FAFE"
+  },
+  "cSpell.words": ["mbid"],
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
+}
