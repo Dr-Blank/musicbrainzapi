@@ -1,29 +1,27 @@
 """ API for musicbrainz"""
+
 import importlib.metadata
 from enum import Enum
 from http import HTTPStatus
 from typing import Any, Callable, Dict, Optional, cast
 
-import requests
-from requests_ratelimiter import LimiterSession
-from .exceptions import (
-    APIError,
-    NotFoundError,
-    RateLimitError,
-    ServerError,
-)
+import requests  # type: ignore
+from requests_ratelimiter import LimiterSession  # type: ignore
+
+from .exceptions import APIError, NotFoundError, RateLimitError, ServerError
 
 __all__ = ["UserAPI"]
 
 
-
 BASE_URL = "https://musicbrainz.org/ws/2"
 
-class Endpoint(Enum):
-    rating = "/rating"
-    tags = "/tag"
-    collection = "/collection"
 
+class Endpoint(Enum):
+    """Endpoints for the API"""
+
+    RATING = "/rating"
+    TAG = "/tag"
+    COLLECTION = "/collection"
 
 
 class UserAPI:
@@ -46,6 +44,7 @@ class UserAPI:
         A callback function to refresh the auth_token
         if it expires
     """
+
     def __init__(
         self,
         auth_token: str,
@@ -54,18 +53,24 @@ class UserAPI:
         refresh_callback: Optional[Callable[..., str]] = None,
     ):
         self._base_url = base_url or BASE_URL
-        self._session = cast(requests.Session, session or LimiterSession(per_second=1))
-        _app_name = __name__.split(".")[0]
+        self._session = cast(
+            requests.Session, session or LimiterSession(per_second=1)
+        )
+        _app_name = __name__.split(".", 1)[0]
         app_metadata = importlib.metadata.metadata(_app_name)
 
         self._session.headers.update({"Authorization": f"Bearer {auth_token}"})
         self._session.headers.update({"Accept": "application/json"})
-        self._session.headers.update({"User-Agent": f"{_app_name}/{app_metadata['Version']} ( {app_metadata['Home-page']} )"})
-        
+        self._session.headers.update(
+            {
+                "User-Agent": (
+                    f"{_app_name}/{app_metadata['Version']} ("
+                    f" {app_metadata['Home-page']} )"
+                )
+            }
+        )
+
         self._refresh_callback = refresh_callback
-
-
-
 
     def _make_request(
         self,
@@ -90,25 +95,27 @@ class UserAPI:
                 raise ServerError(response) from exc
             raise APIError(response) from exc
         return response.json()
-    
+
     def get_rating(
         self,
         mbid: str,
-        type: str,
+        mb_type: str,
     ):
         """
         Get rating for a given MBID
         """
-        endpoint = Endpoint.rating.value
-        response = self._make_request("GET", endpoint, params={"mbid": mbid, "type": type})
+        endpoint = Endpoint.RATING.value
+        response = self._make_request(
+            "GET", endpoint, params={"mbid": mbid, "type": mb_type}
+        )
         return response
-    
+
     def get_collections(
         self,
     ):
         """
         Get collection for the user
         """
-        endpoint = Endpoint.collection.value
+        endpoint = Endpoint.COLLECTION.value
         response = self._make_request("GET", endpoint)
         return response

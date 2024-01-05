@@ -1,6 +1,6 @@
 """Exceptions for the API."""
 
-import requests
+import requests  # type: ignore
 
 
 class APIError(requests.exceptions.RequestException):

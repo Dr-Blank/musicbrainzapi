@@ -27,3 +27,4 @@
 
 if you do not need to use tokens, use [python-musicbrainzngs](https://pypi.org/project/musicbrainzngs/) instead
 
+ref: https://musicbrainz.org/doc/MusicBrainz_API
